@@ -1,124 +1,97 @@
-"use strict";
+'use strict';
 
 var fs = require('fs');
 
-var Event = function() {
-    this.start = null;
-    this.end = null;
-    this.uid = null;
-    this.created = null;
-    this.lastModified = null;
-    this.location = null;
-    this.summary = null;
-    this.details = null;
+function parseDateIcs(str) {
+  const year = +str.slice(0, 4);
+  const month = (+str.slice(4, 6)) - 1;
+  const day = +str.slice(6, 8);
+  const hour = +str.slice(9, 11);
+  const min = +str.slice(11, 13);
+  const sec = +str.slice(13, 15);
+  const timestamp = Date.UTC(year, month, day, hour, min, sec);
+
+  return new Date(timestamp);
 }
 
-var parseDate = function(str) {
-    return new Date(Date.UTC(str.substring(0,4), (Number(str.substring(4,6))-1),
-                    str.substring(6,8), str.substring(9,11),
-                    str.substring(11,13), str.substring(13,15), 0));
-};
+function parseLine(line) {
+  if (line.startsWith('DTSTART:')) {
+    return { start: parseDateIcs(line.replace('DTSTART:', '')) };
+  }
 
-var parseRaw = function(raw) {
+  if (line.startsWith('DTEND:')) {
+    return { end: parseDateIcs(line.replace('DTEND:', '')) };
+  }
 
-    var lines = raw.split('\r\n');
-    var event = new Event(raw);
+  if (line.startsWith('UID:')) {
+    return { id: line.replace('UID:', '') };
+  }
 
-    lines.forEach(function(line) {
+  if (line.startsWith('CREATED:')) {
+    return { created: line.replace('CREATED:', '') };
+  }
 
-        if (line.startsWith('DTSTART:')) {
-            let startTime = line.replace('DTSTART:', '');
-            event.start = parseDate(startTime);
-            return;
-        }
+  if (line.startsWith('LAST-MODIFIED:')) {
+    return { last_modified: line.replace('LAST-MODIFIED:', '') };
+  }
 
-        if (line.startsWith('DTEND:')) {
-            let endTime = line.replace('DTEND:', '');
-            event.end = parseDate(endTime);
-            return;
-        }
+  if (line.startsWith('LOCATION:')) {
+    return { location: line.replace('LOCATION:', '') };
+  }
 
-        if (line.startsWith('UID:')) {
-            let idTask = line.replace('UID:', '');
-            event.uid = idTask;
-            return;
-        }
+  if (line.startsWith('DESCRIPTION:')) {
+    const descriptionData = line.replace('DESCRIPTION:', '').split('\\n');
+    const details = {};
 
-        if(line.startsWith('CREATED:')) {
-            event.created = parseDate(line.substring(8));
-        }
-        else if(line.startsWith('LAST-MODIFIED:')) {
-            event.lastModified = parseDate(line.substring(14));
-        }
-        else if(line.startsWith('LOCATION:')) {
-            event.location = line.substring(9);
-        }
-        else if(line.startsWith('DESCRIPTION:')) {
-            let descriptionData = line.replace("DESCRIPTION:", "").split('\\n');
-            let details = {};
+    descriptionData.forEach((item) => {
+      if (item.startsWith('Tiempo estimado:')) {
+        details.estimated_time = item.replace('Tiempo estimado:', '');
+      }
 
-            descriptionData.forEach(function(item) {
-                if (item.startsWith('Tiempo estimado:') ) {
-                    details.estimated_time = item.replace('Tiempo estimado:','')
-                }
+      if (item.startsWith('Etiquetas:')) {
+        details.tags = descriptionData[1].replace('Etiquetas:', '');
+      }
 
-                if (item.startsWith('Etiquetas:') ) {
-                    details.tags = descriptionData[1].replace('Etiquetas:','')
-                }
+      if (item.startsWith('Ubicación:')) {
+        details.location_task = descriptionData[2].replace('Ubicación:', '');
+      }
+    });
+    return { details };
+  }
 
-                if (item.startsWith('Ubicación:') ) {
-                    details.location_task = descriptionData[2].replace('Ubicación:','')
-                }
-            })
+  if (line.startsWith('SUMMARY:')) {
+    return { summary: line.replace('SUMMARY:', '')};
+  }
+  return false;
+}
 
+function parseIcsContent(data) {
+  const lines = data.split('\r\n');
+  const events = [];
+  let event = {};
 
-            event.details = details;
-        }
-        else if(line.startsWith('SUMMARY:')) {
-            console.log ( line );
-            //var summary = line.substring(8).split('SUMMARY: ');
-            var summary = line.replace("SUMMARY:", "");
-            //event.summary = (summary.length > 0) ? summary[1].replace(' Aktivitetstyp: Okänd', '') : '';
-            event.summary = (summary.length > 0) ? summary : '';
-        }
-
-    })
-
-    return event;
-};
-
-var parseIcs = function(data) {
-    var lines = data.split('\r\n');
-    var raw = '';
-    var events = [];
-    var k = false;
-
-    for(var i = 0; i < lines.length; i++) {
-        if(lines[i] == 'BEGIN:VTODO' || k == true) {
-            raw += lines[i] + '\r\n';
-            k = true;
-
-            if(lines[i] == 'END:VTODO') {
-                events.push(parseRaw(raw));
-                raw = '';
-                k = false;
-            }
-        }
+  lines.forEach((line) => {
+    if (line === 'BEGIN:VTODO') return;
+    parseLine(line) ? Object.assign(event, parseLine(line)) : null;
+    if (line === 'END:VTODO') {
+      events.push(event);
+      event = {};
     }
-    return events;
-};
+    return;
+  });
+
+  return events;
+}
 
 function parseFile(file, callback) {
+  let data;
+  const readFile = fs.createReadStream(file);
+  readFile.setEncoding('utf8');
 
-    let data;
-    let readFile = fs.createReadStream(file);
-    readFile.setEncoding('utf8');
-
-    console.log(`reading ${file} ...`);
-    readFile
-        .on('data', (chunk) => { data += chunk; })
-        .on('end', () => { callback( parseIcs(data) ); });
-
+  console.log(`reading ${file} ...`);
+  readFile
+    .on('data', (chunk) => { data += chunk; })
+    .on('end', () => { callback(parseIcsContent(data)); });
 }
 
-module.exports = parseFile
+module.exports = parseFile;
