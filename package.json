@@ -1,0 +1,25 @@
+{
+  "name": "rtm-someday-tasks",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "nodemon index.js",
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": "6.4.0"
+  },
+  "dependencies": {
+    "dotenv": "^2.0.0",
+    "ics-parse": "0.0.3",
+    "js-md5": "^0.4.1",
+    "rtm-js": "^1.0.2"
+  },
+  "devDependencies": {
+    "eslint": "^3.4.0",
+    "eslint-config-airbnb": "^10.0.1",
+    "eslint-plugin-import": "^1.14.0",
+    "eslint-plugin-jsx-a11y": "^2.2.0",
+    "eslint-plugin-react": "^6.1.2"
+  }
+}
